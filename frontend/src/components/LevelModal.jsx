@@ -10,10 +10,42 @@ function LevelModal({ location, onClose }) {
   const [userAnswer, setUserAnswer] = useState("");
   const [wrongAttempts, setWrongAttempts] = useState({});
   const [totalScore, setTotalScore] = useState(0);
+  const [userId, setUserId] = useState(null);
 
   const MAX_ATTEMPTS = 100;
-  const userId = 1;
-  // Fetch chapter name
+  
+    const fetchUserId = async () => {
+      try {
+        // Step 1: Fetch authenticated user from auth
+        const { data: session, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError) throw sessionError;
+    
+        const user = session?.session?.user;
+        if (!user) {
+          console.error("No authenticated user found.");
+          return;
+        }
+    
+        const userEmail = user.email;
+    
+        // Step 2: Use the email to fetch ID from the users table
+        const { data: userData, error: userError } = await supabase
+          .from('users')
+          .select('id') 
+          .eq('email', userEmail) 
+          .single();
+    
+        if (userError) throw userError;
+    
+        if (userData) {
+          setUserId(userData.id);
+        }
+      } catch (err) {
+        console.error('Error fetching user ID:', err);
+      }
+    };
+  
+
   useEffect(() => {
     const fetchChapterName = async () => {
       try {
@@ -40,15 +72,16 @@ function LevelModal({ location, onClose }) {
       const { data, error } = await supabase
         .from("leaderboard")
         .select("total_score")
-        .eq("id", userId) // Replace with the user’s ID condition
+        .eq("team_id", userId)
         .single();
-
+  
       if (error) throw error;
-      if (data) setTotalScore(data.total_score);
+      if (data) setTotalScore(data.total_score); // Update local state with the current score
     } catch (err) {
       console.error("Error fetching total score:", err);
     }
   };
+  
 
   // Update total score in Supabase
   const updateTotalScore = async (newScore) => {
@@ -56,17 +89,35 @@ function LevelModal({ location, onClose }) {
       const { error } = await supabase
         .from("leaderboard")
         .update({ total_score: newScore })
-        .eq("id", userId); // Replace with the user’s ID condition
-
+        .eq("team_id", userId);
+  
       if (error) throw error;
+  
+      // Fetch the updated score to confirm it's persisted
+      const { data, error: fetchError } = await supabase
+        .from("leaderboard")
+        .select("total_score")
+        .eq("team_id", userId)
+        .single();
+  
+      if (fetchError) throw fetchError;
     } catch (err) {
       console.error("Error updating total score:", err);
     }
   };
+  
+  
 
   useEffect(() => {
-    fetchTotalScore();
-  }, []);
+      fetchUserId();
+    }, []);
+  
+    // Fetch the score after userId is set
+    useEffect(() => {
+      if (userId) {
+        fetchTotalScore();
+      }
+    }, [userId]);
 
   useEffect(() => {
     // Disable scrolling on the body when the modal is open
@@ -123,7 +174,7 @@ function LevelModal({ location, onClose }) {
           .from("team_progress")
           .insert([
             {
-              team_id: userId, // Replace with the actual team_id
+              team_id: userId, 
               question_id: selectedQuestion.id,
               is_solved: true,
               solved_at: solvedAt,
@@ -166,7 +217,7 @@ function LevelModal({ location, onClose }) {
             {selectedQuestion ? selectedQuestion.title : chapterName || " "}
           </h2>
 
-          {!selectedQuestion ? (
+          {!selectedQuestion  ? (
             <Questions
               chapterId={id}
               teamId={userId}

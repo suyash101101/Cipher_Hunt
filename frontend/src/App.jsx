@@ -24,7 +24,7 @@ function App() {
       <Layout>
         <Routes>
           <Route path="/" element={<ContestPage />} />
-          <Route path="/sherlock/:userId" element={<Home />} />
+          <Route path="/sherlock" element={<Home />} />
           <Route path="/level" element={<Level />} />
           <Route path='/leaderboard' element={<Leaderboard/>}/>
         </Routes>

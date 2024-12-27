@@ -54,7 +54,7 @@ function ContestPage() {
       }
 
       setCookie("userId", data.id, { path: "/" });
-      navigate(`/sherlock/${data.id}`);
+      navigate("/sherlock");
     } catch (error) {
       toast.error("Wrong Credentials. Sign Up Before Login");
       console.error(error);
