@@ -22,7 +22,7 @@ function QuestionPage() {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (answer.toLowerCase() === question.answer.toLowerCase()) {
+    if (answer === question.answer) {
       setFeedback('Correct! Well done!');
       // Save progress
       const savedProgress = JSON.parse(localStorage.getItem(`chapter${chapterId}Progress`) || '{}');

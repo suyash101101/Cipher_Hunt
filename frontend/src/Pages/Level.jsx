@@ -6,6 +6,7 @@ import ConnectingPaths from '../components/ConnectingPaths';
 import LevelModal from '../components/LevelModal';
 import DetectiveBobblehead from '../components/DetectiveBobblehead';
 
+
 const islands = [
   { id: 1, name: "Baker Street", x: 5, y: 10 },
   { id: 2, name: "Scotland Yard", x: 15, y: 65 },
@@ -20,15 +21,47 @@ export default function Level() {
   const [unlockedLevel, setUnlockedLevel] = useState(1); // Default to the first level
   const [score, setScore] = useState(null); // Fetched total score
   const [showModal, setShowModal] = useState(false); // Controls modal visibility
- 
-  const team_id = 1; // Replace with team ID 
+  const [userId, setUserId] = useState(null);
+
+  const fetchUserId = async () => {
+    try {
+      // Step 1: Fetch authenticated user from auth
+      const { data: session, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw sessionError;
+  
+      const user = session?.session?.user;
+      if (!user) {
+        console.error("No authenticated user found.");
+        return;
+      }
+  
+      const userEmail = user.email;
+  
+      // Step 2: Use the email to fetch ID from the users table
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('id') 
+        .eq('email', userEmail) 
+        .single();
+  
+      if (userError) throw userError;
+  
+      if (userData) {
+        setUserId(userData.id);
+      }
+    } catch (err) {
+      console.error('Error fetching user ID:', err);
+    }
+  };
+  
 
   const fetchScore = async () => {
     try {
+      if (!userId) return;
       const { data, error } = await supabase
         .from('leaderboard') // Table name
         .select('total_score') // Select the column
-        .eq('id', team_id) // Filter by the specific row
+        .eq('team_id', userId) // Filter by the specific row
         .single(); // Fetch a single row
 
       if (error) throw error;
@@ -48,11 +81,16 @@ export default function Level() {
       setUnlockedLevel(nextLevel);
     }
   }, [score]);
-
-  // Fetch the score when the component mounts
   useEffect(() => {
-    fetchScore();
+    fetchUserId();
   }, []);
+
+  // Fetch score after userId has been set
+  useEffect(() => {
+    if (userId) {
+      fetchScore();
+    }
+  }, [userId]);
 
   return (
     <div className="sherlock-background bg-[url('https://static.vecteezy.com/system/resources/previews/036/105/309/non_2x/ai-generated-vintage-map-of-the-world-on-the-old-paper-background-sepia-tone-ai-generated-free-photo.jpg')] bg-no-repeat bg-cover bg-center object-cover relative h-[85em] lg:h-[90em]">

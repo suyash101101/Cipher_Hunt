@@ -5,18 +5,47 @@ export default function ScoreBoard() {
   const [score, setScore] = useState(null); 
   const [loading, setLoading] = useState(true); 
   const [error, setError] = useState(null); 
-
+  const [userId, setUserId] = useState(null);
   // Fetch the total_score from the leaderboard table
-  const team_id = 1
+  const fetchUserId = async () => {
+    try {
+      // Step 1: Fetch authenticated user from auth
+      const { data: session, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw sessionError;
+  
+      const user = session?.session?.user;
+      if (!user) {
+        console.error("No authenticated user found.");
+        return;
+      }
+  
+      const userEmail = user.email;
+  
+      // Step 2: Use the email to fetch ID from the users table
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('id') 
+        .eq('email', userEmail) 
+        .single();
+  
+      if (userError) throw userError;
+  
+      if (userData) {
+        setUserId(userData.id);
+      }
+    } catch (err) {
+      console.error('Error fetching user ID:', err);
+    }
+  };
+
   const fetchScore = async () => {
     try {
       setLoading(true);
-      
       // Query the leaderboard table
       const { data, error } = await supabase
         .from('leaderboard') // Table name
         .select('total_score') // Select the column
-        .eq('id', team_id) // Filter by the specific row (e.g., id = 1)
+        .eq('team_id', userId) // Filter by the specific row
 
       if (error) throw error;
 
@@ -32,11 +61,16 @@ export default function ScoreBoard() {
       setLoading(false);
     }
   };
-
-  // Fetch the score when the component mounts
   useEffect(() => {
-    fetchScore();
+    fetchUserId();
   }, []);
+
+  // Fetch the score after userId is set
+  useEffect(() => {
+    if (userId) {
+      fetchScore();
+    }
+  }, [userId]);
 
   return (
     <div className="absolute top-4 right-4 z-30 bg-gray-800 bg-opacity-75 px-4 py-2 rounded-lg shadow-lg">
