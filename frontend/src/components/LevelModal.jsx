@@ -8,44 +8,48 @@ function LevelModal({ location, onClose }) {
   const [solvedQuestions, setSolvedQuestions] = useState(new Set());
   const [chapterName, setChapterName] = useState("");
   const [userAnswer, setUserAnswer] = useState("");
-  const [wrongAttempts, setWrongAttempts] = useState({});
   const [totalScore, setTotalScore] = useState(0);
   const [userId, setUserId] = useState(null);
+  const [currentAttempts, setCurrentAttempts] = useState(0);
 
   const MAX_ATTEMPTS = 100;
-  
-    const fetchUserId = async () => {
-      try {
-        // Step 1: Fetch authenticated user from auth
-        const { data: session, error: sessionError } = await supabase.auth.getSession();
-        if (sessionError) throw sessionError;
-    
-        const user = session?.session?.user;
-        if (!user) {
-          console.error("No authenticated user found.");
-          return;
-        }
-    
-        const userEmail = user.email;
-    
-        // Step 2: Use the email to fetch ID from the users table
-        const { data: userData, error: userError } = await supabase
-          .from('users')
-          .select('id') 
-          .eq('email', userEmail) 
-          .single();
-    
-        if (userError) throw userError;
-    
-        if (userData) {
-          setUserId(userData.id);
-        }
-      } catch (err) {
-        console.error('Error fetching user ID:', err);
-      }
-    };
-  
 
+  const fetchUserId = async () => {
+    try {
+      // Fetch authenticated user from auth
+      const { data: session, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw sessionError;
+
+      const user = session?.session?.user;
+      if (!user) {
+        console.error("No authenticated user found.");
+        return;
+      }
+
+      const userEmail = user.email;
+
+      // Use the email to fetch ID from the users table
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('id') 
+        .eq('email', userEmail) 
+        .single();
+
+      if (userError) throw userError;
+
+      if (userData) {
+        setUserId(userData.id);
+      }
+    } catch (err) {
+      console.error('Error fetching user ID:', err);
+    }
+  };
+
+  useEffect(() => {
+    fetchUserId();
+  }, []);
+
+  // Fetch chapter name from Supabase
   useEffect(() => {
     const fetchChapterName = async () => {
       try {
@@ -66,7 +70,7 @@ function LevelModal({ location, onClose }) {
     fetchChapterName();
   }, [id]);
 
-  // Fetch total score from Supabase
+  // Fetch the total score when userId is set
   const fetchTotalScore = async () => {
     try {
       const { data, error } = await supabase
@@ -74,60 +78,82 @@ function LevelModal({ location, onClose }) {
         .select("total_score")
         .eq("team_id", userId)
         .single();
-  
+
       if (error) throw error;
-      if (data) setTotalScore(data.total_score); // Update local state with the current score
+      if (data) setTotalScore(data.total_score);
     } catch (err) {
       console.error("Error fetching total score:", err);
     }
   };
-  
 
-  // Update total score in Supabase
-  const updateTotalScore = async (newScore) => {
-    try {
-      const { error } = await supabase
-        .from("leaderboard")
-        .update({ total_score: newScore })
-        .eq("team_id", userId);
-  
-      if (error) throw error;
-  
-      // Fetch the updated score to confirm it's persisted
-      const { data, error: fetchError } = await supabase
-        .from("leaderboard")
-        .select("total_score")
-        .eq("team_id", userId)
-        .single();
-  
-      if (fetchError) throw fetchError;
-    } catch (err) {
-      console.error("Error updating total score:", err);
+  useEffect(() => {
+    if (userId) {
+      fetchTotalScore();
     }
-  };
-  
-  
+  }, [userId]);
 
+  // Disable scrolling on the body when the modal is open
   useEffect(() => {
-      fetchUserId();
-    }, []);
-  
-    // Fetch the score after userId is set
-    useEffect(() => {
-      if (userId) {
-        fetchTotalScore();
-      }
-    }, [userId]);
-
-  useEffect(() => {
-    // Disable scrolling on the body when the modal is open
     document.body.style.overflowY = "hidden";
     return () => {
-      // Re-enable scrolling on the body when the modal is closed
       document.body.style.overflowY = "auto";
     };
   }, []);
 
+  // Fetch attempts when question is selected or userId is set
+  useEffect(() => {
+    const fetchAttempts = async () => {
+      if (!selectedQuestion || !userId) return;
+
+      try {
+        const { data, error } = await supabase
+          .from("team_progress")
+          .select("attempts")
+          .eq("team_id", userId)
+          .eq("question_id", selectedQuestion.id)
+          .single();
+
+        if (error && error.code !== "PGRST116") throw error; // Ignore "No rows" error
+        const fetchedAttempts = data?.attempts || 0;
+        setCurrentAttempts(fetchedAttempts);
+      } catch (err) {
+        console.error("Error fetching attempts:", err);
+      }
+    };
+
+    fetchAttempts();
+  }, [selectedQuestion, userId]);
+
+  // Initialize wrongAttempts state when modal loads
+  useEffect(() => {
+    if (!userId || !id) return;
+
+    const initializeState = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("team_progress")
+          .select("question_id, attempts")
+          .eq("team_id", userId);
+
+        if (error) throw error;
+
+        if (data) {
+          const attemptsMap = data.reduce((acc, item) => {
+            acc[item.question_id] = item.attempts || 0;
+            return acc;
+          }, {});
+
+          setWrongAttempts(attemptsMap);
+        }
+      } catch (err) {
+        console.error("Error initializing state:", err);
+      }
+    };
+
+    initializeState();
+  }, [userId, id]);
+
+  // Handle question selection
   const handleQuestionSelect = (question) => {
     setSelectedQuestion(question);
   };
@@ -137,65 +163,77 @@ function LevelModal({ location, onClose }) {
     setUserAnswer("");
   };
 
+  // Handle answer submission
   const handleAnswerSubmit = async () => {
     if (!selectedQuestion) return;
-  
-    const currentAttempts = wrongAttempts[selectedQuestion.id] || 0;
-  
-    if (currentAttempts >= MAX_ATTEMPTS || solvedQuestions.has(selectedQuestion.id)) return;
-  
+
     try {
+      // Prevent further attempts if max attempts reached or question is solved
+      if (currentAttempts >= MAX_ATTEMPTS || solvedQuestions.has(selectedQuestion.id)) return;
+
       // Fetch the correct answer for the selected question from Supabase
-      const { data, error } = await supabase
+      const { data: questionData, error: questionError} = await supabase
         .from("questions")
-        .select("answer")
+        .select("answer, points")
         .eq("id", selectedQuestion.id)
         .single();
-  
-      if (error) throw error;
-  
-      const correctAnswer = data?.answer;
-  
-      // Check if the user's answer matches the correct answer
+
+      if (questionError) throw questionError;
+
+      const correctAnswer = questionData?.answer;
+      const pointsEarned = questionData?.points;
+
       if (userAnswer === correctAnswer) {
-        setSolvedQuestions((prev) => {
-          const updatedSolved = new Set(prev);
-          updatedSolved.add(selectedQuestion.id);
-          return updatedSolved;
-        });
-  
-        const newScore = totalScore + selectedQuestion.points;
-        setTotalScore(newScore); // Update local total score
-        await updateTotalScore(newScore); // Update in Supabase
-  
-        // Insert into team_progress table when the question is solved
+        // Mark question as solved
+        setSolvedQuestions((prev) => new Set(prev).add(selectedQuestion.id));
+
+        const newScore = totalScore + pointsEarned;
+        setTotalScore(newScore);
+
+        // Update database when the question is solved
         const solvedAt = new Date().toISOString();
-        const { error: insertError } = await supabase
+        await supabase
           .from("team_progress")
-          .insert([
-            {
-              team_id: userId, 
-              question_id: selectedQuestion.id,
-              is_solved: true,
-              solved_at: solvedAt,
-            },
-          ]);
-  
-        if (insertError) throw insertError;
+          .upsert(
+            [
+              {
+                team_id: userId,
+                question_id: selectedQuestion.id,
+                is_solved: true,
+                solution: userAnswer,
+                solved_at: solvedAt,
+                points_earned: pointsEarned,
+                attempts: currentAttempts,
+              },
+            ],
+            { onConflict: ["team_id", "question_id"] }
+          );
       } else {
-        setWrongAttempts((prev) => ({
-          ...prev,
-          [selectedQuestion.id]: currentAttempts + 1,
-        }));
+        // Increment wrong attempts
+        const updatedAttempts = currentAttempts + 1;
+        setCurrentAttempts(updatedAttempts);
+
+        // Update wrong attempts in the database
+        await supabase
+          .from("team_progress")
+          .upsert(
+            [
+              {
+                team_id: userId,
+                question_id: selectedQuestion.id,
+                is_solved: false,
+                attempts: updatedAttempts,
+              },
+            ],
+            { onConflict: ["team_id", "question_id"] }
+          );
       }
     } catch (err) {
-      console.error("Error checking answer:", err);
+      console.error("Error submitting answer:", err);
     }
-  
-    setUserAnswer("");
+
+    setUserAnswer(""); // Reset input field
   };
-  
-  
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-75 z-50 flex justify-center items-center">
@@ -217,7 +255,7 @@ function LevelModal({ location, onClose }) {
             {selectedQuestion ? selectedQuestion.title : chapterName || " "}
           </h2>
 
-          {!selectedQuestion  ? (
+          {!selectedQuestion ? (
             <Questions
               chapterId={id}
               teamId={userId}
@@ -229,7 +267,7 @@ function LevelModal({ location, onClose }) {
               <p className="mb-6 lg:max-h-[10em] sm:max-h-[4em] max-h-[2em] overflow-y-scroll md:text-base text-xs">{selectedQuestion.description}</p>
               {solvedQuestions.has(selectedQuestion.id) ? (
                 <p className="text-green-500 font-bold">Correct Answer!</p>
-              ) : wrongAttempts[selectedQuestion.id] >= MAX_ATTEMPTS ? (
+              ) : currentAttempts >= MAX_ATTEMPTS ? (
                 <p className="text-red-500 font-bold">
                   Maximum attempts exceeded.
                 </p>
@@ -250,7 +288,7 @@ function LevelModal({ location, onClose }) {
                     Submit
                   </button>
                   <p className="text-red-500 mt-2 lg:text-base text-sm">
-                    Wrong Attempts: {wrongAttempts[selectedQuestion.id] || 0}/{MAX_ATTEMPTS}
+                    Wrong Attempts: {currentAttempts}/{MAX_ATTEMPTS}
                   </p>
                 </>
               )}
