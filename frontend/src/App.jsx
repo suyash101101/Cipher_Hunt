@@ -5,6 +5,7 @@ import Level from './Pages/Level';
 import Preloader from './components/Preloader';
 import Leaderboard from './Pages/Leaderboard';
 import ContestPage from './auth'; 
+import ProtectedRoute from './components/ProtectedRoute';
 import { useState, useEffect } from 'react';
 
 function App() {
@@ -25,7 +26,7 @@ function App() {
         <Routes>
           <Route path="/" element={<ContestPage />} />
           <Route path="/sherlock" element={<Home />} />
-          <Route path="/level" element={<Level />} />
+          <Route path="/level" element={<ProtectedRoute><Level /></ProtectedRoute>} />
           <Route path='/leaderboard' element={<Leaderboard/>}/>
         </Routes>
       </Layout>
