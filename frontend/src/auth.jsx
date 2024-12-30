@@ -42,17 +42,36 @@ function ContestPage() {
       if (signInError) {
         throw signInError;
       }
-
+  
       const { data, error: fetchError } = await supabase
         .from("users")
         .select("id, email, team_name")
         .eq("email", email)
         .single();
-
+  
       if (fetchError || !data) {
         throw fetchError || new Error("User not found");
       }
-
+  
+      // Check if the user's ID exists in the leaderboard table
+      const { data: leaderboardData, error: leaderboardError } = await supabase
+        .from("leaderboard")
+        .select("team_id")
+        .eq("team_id", data.id)
+        .single();
+  
+      if (!leaderboardData) {
+        // If the user's ID is not in the leaderboard table, insert it
+        const { error: insertError } = await supabase.from("leaderboard").insert([
+          {
+            team_id: data.id,
+          },
+        ]);
+        if (insertError) {
+          throw insertError;
+        }
+      }
+  
       setCookie("userId", data.id, { path: "/" });
       navigate("/sherlock");
     } catch (error) {
@@ -60,6 +79,7 @@ function ContestPage() {
       console.error(error);
     }
   };
+  
 
   const handleSignUp = async () => {
     try {
